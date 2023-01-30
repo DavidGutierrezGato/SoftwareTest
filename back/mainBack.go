@@ -46,10 +46,23 @@ func enableCors(w *http.ResponseWriter) {
 }
 
 func main() {
+
+	var bandera string
+	fmt.Println("Quiere agregar datos a ZincSearch? (y/n) ")
+
+	fmt.Scanln(&bandera)
+
+	if bandera == "y" {
+		var ruta string
+		fmt.Println("Ingrese la ruta de la carpeta ")
+		fmt.Scanln(&ruta)
+		log.Println(ruta)
+		cargar(ruta)
+	}
+
 	r := chi.NewRouter()
 
-	
-	cargar()
+	//cargar()
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("welcome"))
@@ -73,6 +86,71 @@ func main() {
 		newTerm2 := `"` + newTerm + `"`
 		println("term: " + newTerm2)
 		query = strings.Replace(query, `"term": "something"`, `"term":`+newTerm2, -1)
+		req, err := http.NewRequest("POST", "http://localhost:4080/api/games3/_search", strings.NewReader(query))
+		if err != nil {
+			log.Fatal(err)
+
+		}
+		req.SetBasicAuth("admin", "Complexpass#123")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+		log.Println(resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//fmt.Println(string(body))
+
+		var myStruct MyStruct
+		json.Unmarshal([]byte(string(body)), &myStruct)
+		//fmt.Printf("%+v", myStruct)
+		fmt.Printf("---------")
+		//fmt.Printf("%+v", myStruct.Hits.Hits)
+		//str := fmt.Sprintf("%+v", myStruct.Hits.Hits)
+
+		out, err := json.Marshal(myStruct.Hits.Hits)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(string(out))
+
+		arreglado := strings.Replace(string(out), "_source", "source", -1)
+		w.Write([]byte(arreglado))
+	})
+
+	r.Get("/find/{find}/{page}", func(w http.ResponseWriter, r *http.Request) {
+		enableCors(&w)
+		query := `{
+			"search_type": "match",
+			"query":
+			{
+				"term": "something",
+				"start_time": "2023-01-24T15:08:48.777Z",
+        		"end_time": "2023-11-25T16:08:48.777Z"
+				
+			},
+			"from": 0,
+			"max_results": 20,
+			"_source": ["From","Subject","To","Body"]
+		}`
+		newTerm := chi.URLParam(r, "find")
+		newTerm2 := `"` + newTerm + `"`
+		println("term: " + newTerm2)
+		query = strings.Replace(query, `"term": "something"`, `"term":`+newTerm2, -1)
+
+		page := chi.URLParam(r, "page")
+		//page2 := `"` + page + `"`
+		println("term: " + page)
+
+		query = strings.Replace(query, `"from": 0`, `"from":`+page, -1)
+
 		req, err := http.NewRequest("POST", "http://localhost:4080/api/games3/_search", strings.NewReader(query))
 		if err != nil {
 			log.Fatal(err)

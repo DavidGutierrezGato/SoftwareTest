@@ -16,8 +16,16 @@ export default {
       ],
       data3:[],
       selectedItem:null,
-      selectedRow: null
+      selectedRow: null,
+      page:0
     }
+  },
+  computed: {
+    uniqueData() {
+      return this.data3 = new Set(this.data3)
+      //this.data3.;
+    },
+  
   },
   methods: {
     find() {
@@ -25,16 +33,34 @@ export default {
       
       console.log(`Searching for ${this.searchValue}`)
 
-      fetch('http://localhost:3000/find/'+this.searchValue)
+      fetch('http://localhost:3000/find/'+this.searchValue+'/'+this.page)
       .then(response => response.json())
       .then(data3 => this.data3 = data3)
+      
       this.selectedItem = null;
      
     },
     select(item,index) {
       this.selectedItem = item.source.Body;
       this.selectedRow = index;
+    },
+    addPage(){
+      this.page += 20
+      this.selectedItem = null;
+      this.selectedRow = null;
+      this.find()
+    },
+    subPage(){
+      this.page -= 20
+      if(this.page < 0)
+      {
+        this.page = 0
+      }
+      this.selectedItem = null;
+      this.selectedRow = null;
+      this.find()
     }
+
     
     
   }
@@ -82,7 +108,7 @@ export default {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="(item,index) in data3" :key="item.id"  v-bind:class="{ 'selected': item === selectedItem, 'selected':selectedRow === index }" @click="select(item,index)" 
+      <tr v-for="(item,index) in uniqueData" :key="item.id"  v-bind:class="{ 'selected': item === selectedItem, 'selected':selectedRow === index }" @click="select(item,index)" 
       >
         <td>{{ item.source.From}}</td>
         <td>{{ item.source.To}}</td>
@@ -92,6 +118,8 @@ export default {
       </tr>
     </tbody>
   </table>
+  <button v-on:click="subPage()">Prev</button>
+  <button v-on:click="addPage()">Next</button>
 
     </div>
     

@@ -4,23 +4,27 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
+	"sync"
+
+	//"io"
 	"log"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
-	"unicode"
 )
 
-func cargar() {
+var count int
+var mu sync.Mutex
 
-	abrirCarpeta("D:/pruebaSoftware/enron_mail_20110402")
+func cargar(ruta string) {
+
+	abrirCarpeta(ruta)
+	//abrirArchivo(ruta)
+	//abrirCarpeta("D:/pruebaSoftware/enron_mail_20110402", 0)
+	//abrirCarpeta("D:/pruebaSoftware/enron_mail_20110402")
 	//abrirArchivo("D:/pruebaSoftware/back/prueba.txt")
-	//http.HandleFunc("/debug/pprof/", pprof.Index)
-	//http.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	//http.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	//http.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+
 }
 
 func abrirCarpeta(ruta string) {
@@ -40,29 +44,27 @@ func abrirCarpeta(ruta string) {
 		return
 	}
 
-	// Imprimir el nombre de cada archivo
 	for _, fileInfo := range fileInfos {
-		//fmt.Println(fileInfo.Name())
-		iter := true
-		for _, c := range fileInfo.Name() {
 
-			if !unicode.IsDigit(c) {
-				iter = false
-			}
-		}
-		//time.Sleep(100)
-
-		if iter == true {
+		if !fileInfo.IsDir() {
 			// abrir archivo
 			abrirArchivo(ruta + "/" + fileInfo.Name())
 		} else {
-			 abrirCarpeta(ruta + "/" + fileInfo.Name())
+			count++
+			if count > 20 {
+				go abrirCarpeta(ruta + "/" + fileInfo.Name())
+			} else {
+				abrirCarpeta(ruta + "/" + fileInfo.Name())
+			}
+
 		}
 
 	}
+	log.Println(count)
 
 }
 
+// Estructura de los emails
 type Email struct {
 	Message_ID                string
 	Date                      string
@@ -84,6 +86,7 @@ type Email struct {
 
 func abrirArchivo(ruta string) {
 
+	//Abrir archivo
 	f, err := os.Open(ruta)
 
 	if err != nil {
@@ -94,20 +97,23 @@ func abrirArchivo(ruta string) {
 	email := Email{}
 
 	scanner := bufio.NewScanner(f)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
 	val := reflect.ValueOf(&email).Elem()
 
+	//Leer datos del archivo
 	for i := 0; i < val.NumField(); i++ {
 
 		scanner.Scan()
+
 		valueField := val.Field(i)
 		parts := strings.Split(scanner.Text(), ":")
 		rest := strings.Join(parts[1:], ":")
 		valueField.SetString(rest)
-		//typeField := val.Type().Field(i)
-		//fmt.Printf("%s: %v\n", typeField.Name, valueField.Interface())
 
 	}
 
+	// Leer contenido del email
 	bodyContent := ""
 	for scanner.Scan() {
 		bodyContent += scanner.Text()
@@ -115,24 +121,14 @@ func abrirArchivo(ruta string) {
 	valueField := val.Field(val.NumField() - 1)
 	valueField.SetString(bodyContent)
 
-	/* print the email struct
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		typeField := val.Type().Field(i)
-		fmt.Printf("%s: %v\n", typeField.Name, valueField.Interface())
-
-	}
-	*/
-
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	//println("=======")
 	userJSON, err := json.MarshalIndent(email, "", "  ")
-	//fmt.Println(string(userJSON))
-	//=============
 
+	mu.Lock()
+	//Peticion post a ZincSearch
 	req, err := http.NewRequest("POST", "http://localhost:4080/api/games3/_doc", strings.NewReader(string(userJSON)))
 	if err != nil {
 		log.Fatal(err)
@@ -146,11 +142,5 @@ func abrirArchivo(ruta string) {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
-	log.Println(resp.StatusCode)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(body))
-
+	mu.Unlock()
 }
